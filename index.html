@@ -249,7 +249,7 @@
                         <input type="hidden" id="comic-cover-data"> <p class="text-red-500 text-xs italic mt-1 hidden" data-validation-for="comic-cover-upload">Image file is too large (max 2MB).</p>
                     </div>
 
-                    <button type="submit" class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50" disabled>
+                    <button type="submit" class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
                         <span id="save-btn-text">Save Comic</span>
                         <span id="save-btn-loader" class="inline-loader hidden"></span>
                     </button>
@@ -342,7 +342,7 @@
                 coverUpload: document.getElementById('comic-cover-upload'),
                 coverPreview: document.getElementById('cover-preview'),
                 coverDataInput: document.getElementById('comic-cover-data'),
-                submitBtn: comicForm.querySelector('button[type="submit"]'),
+                submitBtn: document.querySelector('#comic-form button[type="submit"]'), // More specific selector
                 saveBtnText: document.getElementById('save-btn-text'),
                 saveBtnLoader: document.getElementById('save-btn-loader')
             },
@@ -407,6 +407,10 @@
             const targetViewElement = appElements.views[viewId];
             if (targetViewElement) {
                 targetViewElement.classList.remove('hidden');
+                // ** Ensure save button is enabled when navigating TO the add view **
+                if (viewId === 'add') {
+                    setSaveButtonState(true); // Enable the button
+                }
             } else {
                 console.error("View element not found for ID:", viewId);
                 appElements.views.collection.classList.remove('hidden'); // Fallback
@@ -524,16 +528,17 @@
             messageBoxIcon.style.display = iconClass ? 'inline-block' : 'none'; // Hide icon if none specified
 
             // Set style class
-            messageBox.className = ``; // Clear previous classes
+            messageBox.className = ``; // Clear previous classes first!
+            messageBox.classList.add('show'); // Add show class first
             messageBox.classList.add(type); // Add type class (success, error, info)
 
-            // Show message
-            messageBox.classList.add('show');
 
             // Set timer to hide
             state.messageTimeoutId = setTimeout(() => {
                 messageBox.classList.remove('show');
                 state.messageTimeoutId = null;
+                 // Also remove type class after hiding
+                 setTimeout(() => { messageBox.classList.remove(type); }, 500); // Delay removal for fade out
             }, duration);
         }
 
@@ -543,6 +548,25 @@
          */
         function generateComicId() {
              return `comic_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+        }
+
+        /**
+         * Sets the enabled/disabled state of the Save Comic button and toggles the loader.
+         * @param {boolean} enable - True to enable, false to disable.
+         */
+        function setSaveButtonState(enable) {
+             const { submitBtn, saveBtnText, saveBtnLoader } = appElements.addForm;
+             if (enable) {
+                 submitBtn.disabled = false;
+                 submitBtn.classList.remove('opacity-50', 'cursor-not-allowed'); // Use Tailwind classes for disabled state appearance
+                 saveBtnText.classList.remove('hidden');
+                 saveBtnLoader.classList.add('hidden');
+             } else {
+                 submitBtn.disabled = true;
+                 submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                 saveBtnText.classList.add('hidden');
+                 saveBtnLoader.classList.remove('hidden');
+             }
         }
 
         // ========================================================================
@@ -766,9 +790,9 @@
                     let source = 'collection'; // Where did the list of issues come from?
 
                     // Check if the title exists in our mock database
-                    const mockIssues = Object.keys(mockSeriesDb).find(key => key.toLowerCase() === lowerTitle);
-                    if (mockIssues) {
-                        issuesToShow = mockSeriesDb[mockIssues];
+                    const mockIssuesKey = Object.keys(mockSeriesDb).find(key => key.toLowerCase() === lowerTitle);
+                    if (mockIssuesKey) {
+                        issuesToShow = mockSeriesDb[mockIssuesKey];
                         source = 'mockDB';
                         console.log(`Using mockDB for "${title}". Issues:`, issuesToShow);
                     } else {
@@ -913,7 +937,7 @@
         function handleComicFormSubmit(e) {
             e.preventDefault(); // Prevent default page reload
             console.log('Comic form submission initiated.');
-            const { form, idInput, titleInput, issueInput, dateInput, costInput, artistInput, publisherInput, coverDataInput, submitBtn, saveBtnText, saveBtnLoader } = appElements.addForm;
+            const { form, idInput, titleInput, issueInput, dateInput, costInput, artistInput, publisherInput, coverDataInput } = appElements.addForm;
 
             // --- Basic Client-Side Validation ---
             let isValid = true;
@@ -938,9 +962,11 @@
             }
              // Image size validation (already done on change, but double check)
              const coverData = coverDataInput.value;
+             const imageSizeErrorElement = form.querySelector('[data-validation-for="comic-cover-upload"]');
              if (coverData && coverData.length * 0.75 > MAX_IMAGE_SIZE_BYTES) { // Estimate byte size from base64 length
                  isValid = false;
-                 form.querySelector('[data-validation-for="comic-cover-upload"]').classList.remove('hidden');
+                 imageSizeErrorElement.textContent = "Image file is too large (max 2MB).";
+                 imageSizeErrorElement.classList.remove('hidden');
                  showMessage("Cover image is too large (max 2MB). Please choose a smaller file.", 'error', 5000);
              }
 
@@ -948,17 +974,11 @@
             if (!isValid) {
                 console.warn("Form validation failed.");
                 showMessage("Please correct the errors in the form.", 'error');
-                 // Enable button if validation fails client-side
-                 submitBtn.disabled = false;
-                 saveBtnText.classList.remove('hidden');
-                 saveBtnLoader.classList.add('hidden');
                 return; // Stop submission
             }
 
             // --- Disable button, show loader ---
-            submitBtn.disabled = true;
-            saveBtnText.classList.add('hidden');
-            saveBtnLoader.classList.remove('hidden');
+            setSaveButtonState(false); // Disable button
 
             // --- Process Data ---
             const id = idInput.value; // Get ID if editing
@@ -1015,7 +1035,7 @@
                     }
 
                     saveData();
-                    resetForm();
+                    resetForm(); // Reset form fields (also enables button)
                     renderCollection(); // Render the updated collection
                     console.log('Save successful, navigating back to collection.');
                     showView('collection'); // Navigate back
@@ -1023,12 +1043,10 @@
                 } catch (error) {
                      console.error("Error during form submission processing:", error);
                      showMessage(`Error saving comic: ${error.message || 'Unknown error'}`, 'error', 5000);
-                } finally {
-                    // --- Re-enable button, hide loader ---
-                    submitBtn.disabled = false;
-                    saveBtnText.classList.remove('hidden');
-                    saveBtnLoader.classList.add('hidden');
+                     setSaveButtonState(true); // Re-enable button on error
                 }
+                // No finally block needed here for button state, as resetForm handles success
+                // and the catch block handles error.
             }, 300); // Simulate network delay
         }
 
@@ -1095,17 +1113,14 @@
          * Resets the entire add/edit form to its default state.
          */
         function resetForm() {
-            const { form, idInput, title: addEditTitleElement, submitBtn, saveBtnText, saveBtnLoader } = appElements.addForm;
+            const { form, idInput, title: addEditTitleElement } = appElements.addForm;
             form.reset(); // Resets all standard form fields
             idInput.value = ''; // Ensure hidden ID is cleared
             resetCoverPreview(); // Reset image preview
             addEditTitleElement.textContent = 'Add New Comic';
             // Clear validation messages
             form.querySelectorAll('[data-validation-for]').forEach(el => el.classList.add('hidden'));
-             // Ensure button is enabled and shows text
-             submitBtn.disabled = false;
-             saveBtnText.classList.remove('hidden');
-             saveBtnLoader.classList.add('hidden');
+            setSaveButtonState(true); // Ensure button is enabled after reset
             console.log("Add/Edit form reset.");
         }
 
@@ -1119,7 +1134,7 @@
             if (targetView) {
                 // Only reset form if navigating TO the add view or away from it
                 if (targetView === 'add' || state.currentView === 'add') {
-                    resetForm();
+                    resetForm(); // Resetting ensures save button is enabled
                 }
                 showView(targetView);
             }
@@ -1130,7 +1145,7 @@
          */
         function handleScanButtonClick() {
             console.log("Scan Comic button clicked (simulation).");
-            resetForm(); // Start with a clean form
+            resetForm(); // Start with a clean form (enables save button)
             // Simulate finding a comic
             appElements.addForm.titleInput.value = "Saga"; // Use a different example
             appElements.addForm.issueInput.value = "1";
@@ -1141,8 +1156,6 @@
             appElements.addForm.title.textContent = 'Add Scanned Comic (Confirm Details)';
             showView('add'); // Go to the add form for confirmation/saving
             showMessage("Simulated Scan: Please confirm details and add cover.", 'info', 4000);
-             // Enable save button after pre-filling
-             appElements.addForm.submitBtn.disabled = false;
         }
 
         /**
@@ -1212,7 +1225,7 @@
                  if (comic) {
                      console.log("Editing comic:", comic);
                      // Populate the form
-                     resetForm(); // Clear first
+                     resetForm(); // Clear first (also enables save button)
                      appElements.addForm.title.textContent = 'Edit Comic';
                      appElements.addForm.idInput.value = comic.id;
                      appElements.addForm.titleInput.value = comic.title;
@@ -1228,8 +1241,6 @@
                      } else {
                           resetCoverPreview(); // Ensure preview is hidden if no image
                      }
-                      // Enable save button when opening edit form
-                      appElements.addForm.submitBtn.disabled = false;
                      showView('add');
                  } else {
                      console.error("Edit button clicked, but comic not found for ID:", state.currentDetailComicId);
@@ -1369,9 +1380,6 @@
             // Collection view controls
             appElements.collection.searchInput.addEventListener('input', handleSearchInput);
             appElements.collection.toggleViewBtn.addEventListener('click', handleToggleViewClick);
-
-             // Enable save button initially on add form (will be disabled on submit)
-             appElements.addForm.submitBtn.disabled = false;
         }
 
         /**
@@ -1381,7 +1389,7 @@
             console.log("Initializing ComicTrackr App...");
             loadData(); // Load data first
             initializeEventListeners(); // Then set up listeners
-            showView('collection'); // Show initial view
+            showView('collection'); // Show initial view (calls updateNavButtonsUI)
             renderCollection(); // Render initial collection
             console.log("ComicTrackr App Initialized.");
         }
