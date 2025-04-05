@@ -1,4 +1,4 @@
-<style>
+
       /* Lucide Icons Font via unpkg */
       @font-face {
         font-family: 'LucideIcons';
@@ -160,5 +160,3 @@
             outline-offset: 2px;
         }
         /* Tailwind focus rings often handle this, but explicit focus-visible is good */
-
-    </style>
